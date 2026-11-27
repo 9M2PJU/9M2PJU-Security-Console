@@ -83,4 +83,4 @@ If your Nginx vhosts log to separate files without `$host` in `access_log`, you 
 
 ## License
 
-MIT License - Copyright (c) 2026 9M2PJU. See [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 (AGPL-3.0) - Copyright (c) 2026 9M2PJU. See [LICENSE](LICENSE).
