@@ -1,0 +1,12 @@
+# Optional CrowdSec s02-enrich parser to map per-vhost Nginx log filenames to site domains.
+# Place in /etc/crowdsec/parsers/s02-enrich/site-enrich.yaml (or /usr/local/etc/crowdsec/... on FreeBSD).
+filter: "evt.Meta.service == 'http' && evt.Meta.log_type in ['http_access-log', 'http_error-log']"
+name: 9m2pju/site-enrich
+description: "Map Nginx vhost log paths to site names"
+statics:
+  - meta: site
+    expression: >-
+      evt.Parsed.target_fqdn != '' ? evt.Parsed.target_fqdn :
+      (evt.Meta.datasource_path contains '/site-a_' ? 'site-a.example.com' :
+      (evt.Meta.datasource_path contains '/site-b_' ? 'site-b.example.com' :
+      TrimPrefix(evt.Meta.datasource_path, '/var/log/nginx/')))

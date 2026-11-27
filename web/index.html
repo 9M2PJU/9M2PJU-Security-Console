@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>9M2PJU Security Console - {{.Hostname}}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href="/favicon.ico?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2">
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #131a26;
+    --panel-2: #182132;
+    --border: #253044;
+    --text: #e6edf7;
+    --muted: #8b9bb4;
+    --accent: #38bdf8;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .wrap {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 18px 20px 40px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .logo-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-svg {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.25));
+  }
+  .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+  }
+  .dot.off {
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
+  }
+  footer.console-footer {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 0.78rem;
+  }
+  .footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .footer-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .footer-sep { color: var(--border); }
+  h1 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .pill.ok { color: #86efac; border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.12); }
+  .pill.warn { color: #fcd34d; border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.12); }
+  .pill.bad { color: #fca5a5; border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.12); }
+  .pill.site { color: #7dd3fc; border-color: rgba(56,189,248,0.45); background: rgba(56,189,248,0.12); }
+  .pill.uri { color: #fde68a; border-color: rgba(245,158,11,0.35); background: rgba(245,158,11,0.10); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pill.meta { color: #cbd5e1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  button, .btn {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  button:hover, .btn:hover { border-color: var(--accent); color: #fff; }
+  button.primary { background: var(--accent); color: #081320; border-color: var(--accent); }
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .kpi {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .kpi .lbl { color: var(--muted); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .kpi .val { font-size: 1.55rem; font-weight: 700; margin-top: 4px; color: #fff; }
+  .kpi .sub { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
+  .charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 0.88rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .bar-row {
+    display: grid;
+    grid-template-columns: minmax(110px, 1fr) 1.4fr 48px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 0.82rem;
+    cursor: pointer;
+  }
+  .bar-row:hover .bar-name { color: var(--accent); }
+  .bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { height: 8px; background: #0c111b; border-radius: 999px; overflow: hidden; border: 1px solid #1e293b; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, #0284c7, #38bdf8); border-radius: 999px; }
+  .bar-fill.scen { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .bar-fill.ctry { background: linear-gradient(90deg, #7c3aed, #a78bfa); }
+  .bar-num { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hour-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 130px;
+    padding-top: 12px;
+  }
+  .hour-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .hour-bar {
+    width: 100%;
+    min-height: 2px;
+    background: linear-gradient(180deg, #38bdf8, #0369a1);
+    border-radius: 3px 3px 0 0;
+  }
+  .hour-lbl {
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 4px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    height: 34px;
+  }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    padding: 8px 14px;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab.active {
+    background: var(--panel-2);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  input[type="text"], input[type="password"], select {
+    background: #0d131d;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 0.84rem;
+    outline: none;
+  }
+  input[type="text"] { min-width: 220px; flex: 1; max-width: 360px; }
+  input[type="text"]:focus, input[type="password"]:focus, select:focus { border-color: var(--accent); }
+  button.danger { border-color: rgba(239,68,68,0.45); color: #fca5a5; }
+  button.danger:hover { border-color: var(--red); background: rgba(239,68,68,0.14); }
+  .msg { border-radius: 8px; padding: 9px 12px; font-size: 0.83rem; margin-bottom: 12px; }
+  .msg.ok { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.4); color: #86efac; }
+  .msg.err { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .form-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 0.76rem; color: var(--muted); font-weight: 600; }
+  label.chk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .table-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: #101622;
+  }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover { background: rgba(56,189,248,0.06); }
+  .ctx-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .muted { color: var(--muted); font-size: 0.78rem; }
+  .pager {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }
+  .hidden { display: none !important; }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 8, 14, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    z-index: 50;
+  }
+  .modal {
+    width: 100%;
+    max-width: 920px;
+    max-height: 88vh;
+    overflow-y: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  }
+  .modal-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    margin-bottom: 14px;
+  }
+  .ev-card {
+    background: #0d131d;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    font-size: 0.82rem;
+  }
+  .ev-grid {
+    display: grid;
+    grid-template-columns: 125px 1fr;
+    gap: 4px 10px;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-row">
+      <div class="logo-wrap">
+        <svg class="logo-svg" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="hdrShield" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#38bdf8"/>
+              <stop offset="100%" stop-color="#0284c7"/>
+            </linearGradient>
+          </defs>
+          <path d="M32 4L8 14v17c0 14.5 10.2 26.8 24 30 13.8-3.2 24-15.5 24-30V14L32 4z" fill="#0d1829" stroke="url(#hdrShield)" stroke-width="3.2"/>
+          <path d="M32 10L13 18v13c0 11.4 7.8 21.1 19 24.1 11.2-3 19-12.7 19-24.1V18L32 10z" fill="none" stroke="rgba(56,189,248,0.22)" stroke-width="1.2"/>
+          <path d="M21 26a15.5 15.5 0 0 1 22 0" fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round"/>
+          <path d="M25.5 30.5a9.2 9.2 0 0 1 13 0" fill="none" stroke="#7dd3fc" stroke-width="2.4" stroke-linecap="round"/>
+          <circle cx="32" cy="35.5" r="3.6" fill="#22c55e"/>
+          <path d="M23.5 43.5l8.5 4.2 8.5-4.2" fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <h1>9M2PJU Security Console</h1>
+          <div class="muted" style="font-size:0.74rem;">Host Defense &amp; Threat Telemetry</div>
+        </div>
+      </div>
+      <span class="pill">{{.Hostname}}</span>
+      <span id="engStatus" class="pill ok"><span id="engDot" class="dot"></span> Checking engine...</span>
+      <span id="modePill" class="pill warn">Checking mode...</span>
+      <span id="lastSync" class="muted"></span>
+    </div>
+    <div class="actions">
+      <label class="chk"><input type="checkbox" id="autoRefresh" checked> Auto 30s</label>
+      <button onclick="refreshAll()">Refresh</button>
+      <button onclick="openPwModal()">Change Password</button>
+      <a class="btn" href="/logout">Logout ({{.Username}} - {{.Role}})</a>
+    </div>
+  </header>
+
+  <div id="modeBanner" class="msg hidden" style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);color:#fde68a;">
+    <strong>Monitor-Only Mode (0 bouncers active):</strong> Attacks below are detected and flagged in the local database, not actively blocked by a firewall bouncer yet.
+  </div>
+
+  <section class="kpis">
+    <div class="kpi"><div class="lbl">Alerts (24h)</div><div class="val" id="kAlerts24h">-</div><div class="sub" id="kTotalAlerts">Total: -</div></div>
+    <div class="kpi"><div class="lbl" id="kBansLbl">Flagged Decisions</div><div class="val" id="kActiveBans">-</div><div class="sub" id="kBansSub">Checking bouncers...</div></div>
+    <div class="kpi"><div class="lbl">CAPI Community Bans</div><div class="val" id="kCapiBans">-</div><div class="sub">Shared CrowdSec blocklist</div></div>
+    <div class="kpi"><div class="lbl">Unique Attackers (24h)</div><div class="val" id="kUniqueIPs">-</div><div class="sub" id="kDbSize">DB: -</div></div>
+    <div class="kpi"><div class="lbl">Top Targeted Site (24h)</div><div class="val" id="kTopSite" style="font-size:1.15rem;margin-top:8px;">-</div><div class="sub">Click site bars below to filter</div></div>
+  </section>
+
+  <section class="charts">
+    <div class="panel"><h2>Top Attacked Sites (24h) <span class="muted">click to filter</span></h2><div id="cSites"></div></div>
+    <div class="panel"><h2>Top Scenarios (24h) <span class="muted">click to filter</span></h2><div id="cScenarios"></div></div>
+    <div class="panel"><h2>24h Alerts Timeline ({{.TZName}})</h2><div id="cHourly" class="hour-chart"></div></div>
+    <div class="panel"><h2>Top Source Countries (24h)</h2><div id="cCountries"></div></div>
+  </section>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="alerts" onclick="switchTab('alerts')">Alerts Feed</button>
+    <button class="tab" data-tab="decisions" onclick="switchTab('decisions')">Active Local Bans</button>
+    <button class="tab" data-tab="sources" onclick="switchTab('sources')">Log Sources & Engine</button>
+    {{if .IsAdmin}}<button class="tab" data-tab="users" onclick="switchTab('users')">User Management</button>{{end}}
+  </div>
+
+  <div id="tab-alerts">
+    <div class="filters">
+      <input type="text" id="qInput" placeholder="Search IP, ASN, country, site, target_uri, user-agent..." oninput="debouncedLoadAlerts()">
+      <select id="siteSelect" onchange="page=1;loadAlerts()"><option value="">All Sites</option></select>
+      <select id="scenSelect" onchange="page=1;loadAlerts()"><option value="">All Scenarios</option></select>
+      <select id="winSelect" onchange="page=1;loadAlerts()">
+        <option value="24h">Last 24h</option>
+        <option value="1h">Last 1h</option>
+        <option value="7d">Last 7d</option>
+        <option value="">All Time</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="hideRbl" onchange="page=1;loadAlerts()"> Hide postscreen-rbl</label>
+      <label class="chk"><input type="checkbox" id="activeOnly" onchange="page=1;loadAlerts()"> Active bans only</label>
+      <button onclick="resetFilters()">Reset</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:155px;">When ({{.TZName}})</th>
+            <th style="width:230px;">Source</th>
+            <th style="width:270px;">Scenario & Decision</th>
+            <th>Context (Site, Target URI, Method, Status)</th>
+          </tr>
+        </thead>
+        <tbody id="alertsBody"><tr><td colspan="4" class="muted">Loading alerts...</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <span id="pagerInfo">-</span>
+      <div>
+        <button id="prevBtn" onclick="if(page>1){page--;loadAlerts()}">Prev</button>
+        <button id="nextBtn" onclick="page++;loadAlerts()">Next</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-decisions" class="hidden">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Value</th>
+            <th>Scenario</th>
+            <th>Action</th>
+            <th>Created ({{.TZName}})</th>
+            <th>Remaining / Until</th>
+          </tr>
+        </thead>
+        <tbody id="decisionsBody"><tr><td colspan="6" class="muted">Loading decisions...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-sources" class="hidden">
+    <div class="charts" style="grid-template-columns: 2fr 1fr;">
+      <div class="panel">
+        <h2>Log Acquisition Metrics (Live from CrowdSec Prometheus)</h2>
+        <div class="table-wrap" style="border:0;">
+          <table>
+            <thead>
+              <tr><th>Site</th><th>Log File</th><th>Lines Read</th><th>Parsed</th><th>Unparsed</th></tr>
+            </thead>
+            <tbody id="sourcesBody"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>CAPI Community Blocklist Breakdown</h2>
+        <div id="capiBody"></div>
+      </div>
+    </div>
+  </div>
+
+  {{if .IsAdmin}}
+  <div id="tab-users" class="hidden">
+    <div class="panel" style="margin-bottom:14px;">
+      <h2>Add New User</h2>
+      <div id="userMsg" class="msg hidden"></div>
+      <form class="form-row" onsubmit="return createUser(event)">
+        <div class="field">
+          <label for="newUsername">Username</label>
+          <input type="text" id="newUsername" placeholder="e.g. operator1" required style="min-width:180px;">
+        </div>
+        <div class="field">
+          <label for="newUserPass">Password (min 8 chars)</label>
+          <input type="password" id="newUserPass" placeholder="Strong password" required minlength="8" style="min-width:200px;">
+        </div>
+        <div class="field">
+          <label for="newUserRole">Role</label>
+          <select id="newUserRole">
+            <option value="viewer">Viewer (Read-Only)</option>
+            <option value="admin">Admin (Full Control)</option>
+          </select>
+        </div>
+        <button type="submit" class="primary">Create User</button>
+      </form>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Created ({{.TZName}})</th>
+            <th style="width:240px;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersBody"><tr><td colspan="4" class="muted">Loading users...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  <footer class="console-footer">
+    <div class="footer-meta">
+      <span class="footer-brand">
+        <svg style="width:18px;height:18px;" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 4L8 14v17c0 14.5 10.2 26.8 24 30 13.8-3.2 24-15.5 24-30V14L32 4z" fill="#0d1829" stroke="#38bdf8" stroke-width="4"/>
+          <circle cx="32" cy="34" r="5" fill="#22c55e"/>
+        </svg>
+        9M2PJU Security Console
+      </span>
+      <span class="footer-sep">|</span>
+      <span>Node: <span class="mono">{{.Hostname}}</span></span>
+      <span class="footer-sep">|</span>
+      <span>Timezone: {{.TZName}}</span>
+    </div>
+    <div class="footer-meta">
+      <span>Read-Only Telemetry</span>
+      <span class="footer-sep">|</span>
+      <span>mTLS Origin Lock</span>
+      <span class="footer-sep">|</span>
+      <span>&copy; 2026 9M2PJU Security Operations</span>
+    </div>
+  </footer>
+</div>
+
+<div id="pwModalBg" class="modal-backdrop hidden" onclick="if(event.target===this)closePwModal()">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-hdr">
+      <div>
+        <strong>Change Your Password</strong>
+        <div class="muted">Account: {{.Username}}</div>
+      </div>
+      <button onclick="closePwModal()">Close</button>
+    </div>
+    <div id="pwMsg" class="msg hidden"></div>
+    <form onsubmit="return submitChangePassword(event)">
+      <div class="field" style="margin-bottom:12px;">
+        <label for="curPass">Current Password</label>
+        <input type="password" id="curPass" required autocomplete="current-password">
+      </div>
+      <div class="field" style="margin-bottom:12px;">
+        <label for="newPass1">New Password (min 8 characters)</label>
+        <input type="password" id="newPass1" required minlength="8" autocomplete="new-password">
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label for="newPass2">Confirm New Password</label>
+        <input type="password" id="newPass2" required minlength="8" autocomplete="new-password">
+      </div>
+      <button type="submit" class="primary" style="width:100%;">Update Password</button>
+    </form>
+  </div>
+</div>
+
+<div id="resetPwModalBg" class="modal-backdrop hidden" onclick="if(event.target===this)closeResetModal()">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-hdr">
+      <div>
+        <strong>Reset User Password</strong>
+        <div id="resetTargetLbl" class="muted"></div>
+      </div>
+      <button onclick="closeResetModal()">Close</button>
+    </div>
+    <div id="resetMsg" class="msg hidden"></div>
+    <form onsubmit="return submitAdminResetPassword(event)">
+      <input type="hidden" id="resetTargetUser">
+      <div class="field" style="margin-bottom:14px;">
+        <label for="resetNewPass">New Password (min 8 characters)</label>
+        <input type="password" id="resetNewPass" required minlength="8" autocomplete="new-password">
+      </div>
+      <button type="submit" class="primary" style="width:100%;">Save New Password</button>
+    </form>
+  </div>
+</div>
+
+<div id="modalBg" class="modal-backdrop hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div>
+        <strong id="mTitle">Alert Details</strong>
+        <div id="mSub" class="muted"></div>
+      </div>
+      <button onclick="closeModal()">Close</button>
+    </div>
+    <div id="mBody"></div>
+  </div>
+</div>
+
+<script>
+let page = 1;
+const pageSize = 50;
+let currentTab = 'alerts';
+let debounceTimer = null;
+let activeBouncers = 0;
+
+function flagEmoji(code) {
+  if (!code || !/^[A-Za-z]{2}$/.test(code)) return '';
+  return String.fromCodePoint(...code.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+}
+
+function formatFullURL(site, uri) {
+  if (!uri) return '';
+  if (!site || site === 'unknown' || site.startsWith('mail ') || site.startsWith('ssh ')) return uri;
+  const cleanSite = site.replace(/^https?:\/\//, '');
+  const cleanUri = uri.startsWith('/') ? uri : '/' + uri;
+  return 'https://' + cleanSite + cleanUri;
+}
+
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function debouncedLoadAlerts() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => { page = 1; loadAlerts(); }, 250);
+}
+
+function renderBars(elId, items, cls, clickHandler) {
+  const el = document.getElementById(elId);
+  if (!items || items.length === 0) {
+    el.innerHTML = '<div class="muted">No data in window</div>';
+    return;
+  }
+  const max = Math.max(...items.map(i => i.count), 1);
+  el.innerHTML = items.map(i => {
+    const pct = Math.max(3, Math.round((i.count / max) * 100));
+    const attr = clickHandler ? `onclick="${clickHandler}('${esc(i.name).replace(/'/g,"\\'")}')"` : '';
+    const flag = cls === 'ctry' ? flagEmoji(i.name) : '';
+    const displayName = flag ? `${flag} ${esc(i.name)}` : esc(i.name);
+    return `<div class="bar-row" ${attr} title="${esc(i.name)}: ${i.count}">
+      <div class="bar-name">${displayName}</div>
+      <div class="bar-track"><div class="bar-fill ${cls}" style="width:${pct}%"></div></div>
+      <div class="bar-num">${i.count}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHourly(buckets) {
+  const el = document.getElementById('cHourly');
+  if (!buckets || buckets.length === 0) {
+    el.innerHTML = '<div class="muted">No data</div>';
+    return;
+  }
+  const max = Math.max(...buckets.map(b => b.count), 1);
+  el.innerHTML = buckets.map((b, idx) => {
+    const h = b.count > 0 ? Math.max(6, Math.round((b.count / max) * 78)) : 2;
+    const lbl = idx % 3 === 0 ? b.label : '';
+    return `<div class="hour-col" title="${esc(b.label)} {{.TZName}}: ${b.count} alerts">
+      <div class="hour-bar" style="height:${h}px"></div>
+      <div class="hour-lbl">${esc(lbl)}</div>
+    </div>`;
+  }).join('');
+}
+
+function setSiteFilter(site) {
+  document.getElementById('siteSelect').value = site;
+  switchTab('alerts');
+  page = 1;
+  loadAlerts();
+}
+
+function setScenarioFilter(scen) {
+  document.getElementById('scenSelect').value = scen;
+  switchTab('alerts');
+  page = 1;
+  loadAlerts();
+}
+
+function resetFilters() {
+  document.getElementById('qInput').value = '';
+  document.getElementById('siteSelect').value = '';
+  document.getElementById('scenSelect').value = '';
+  document.getElementById('winSelect').value = '24h';
+  document.getElementById('hideRbl').checked = false;
+  document.getElementById('activeOnly').checked = false;
+  page = 1;
+  loadAlerts();
+}
+
+function syncSelect(id, options, defaultLabel) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${defaultLabel}</option>` +
+    (options || []).map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('');
+  if (cur && (options || []).includes(cur)) sel.value = cur;
+}
+
+async function apiGet(url) {
+  const res = await fetch(url, { credentials: 'same-origin' });
+  if (res.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  return res.json();
+}
+
+async function loadOverview() {
+  const ov = await apiGet('/api/overview');
+  document.getElementById('kAlerts24h').textContent = ov.alerts_24h;
+  document.getElementById('kTotalAlerts').textContent = 'Total in DB: ' + ov.total_alerts;
+  document.getElementById('kActiveBans').textContent = ov.active_local_bans;
+  document.getElementById('kCapiBans').textContent = ov.capi_bans.toLocaleString();
+  document.getElementById('kUniqueIPs').textContent = ov.unique_ips_24h;
+  document.getElementById('kTopSite').textContent = ov.top_site_24h || '-';
+  document.getElementById('lastSync').textContent = 'Updated: ' + ov.generated_at;
+
+  const dbMB = ov.metrics && ov.metrics.db_size_bytes ? (ov.metrics.db_size_bytes / (1024*1024)).toFixed(1) + ' MB' : '-';
+  document.getElementById('kDbSize').textContent = 'SQLite DB: ' + dbMB;
+
+  const st = document.getElementById('engStatus');
+  if (ov.metrics && ov.metrics.available) {
+    st.className = 'pill ok';
+    st.innerHTML = '<span class="dot"></span> Security Engine Online';
+  } else {
+    st.className = 'pill bad';
+    st.innerHTML = '<span class="dot off"></span> Metrics Unavailable';
+  }
+
+  activeBouncers = ov.active_bouncers || 0;
+  const modePill = document.getElementById('modePill');
+  const modeBanner = document.getElementById('modeBanner');
+  const bansLbl = document.getElementById('kBansLbl');
+  const bansSub = document.getElementById('kBansSub');
+  if (activeBouncers === 0) {
+    modePill.className = 'pill warn';
+    modePill.textContent = 'Monitor Only (Not Blocking)';
+    modeBanner.classList.remove('hidden');
+    bansLbl.textContent = 'Flagged Decisions (Alert-Only)';
+    bansSub.textContent = '0 bouncers enforcing (not blocking)';
+  } else {
+    modePill.className = 'pill ok';
+    modePill.textContent = `Enforcing (${activeBouncers} Bouncer${activeBouncers > 1 ? 's' : ''})`;
+    modeBanner.classList.add('hidden');
+    bansLbl.textContent = 'Active Local Bans';
+    bansSub.textContent = `Enforced by ${activeBouncers} active bouncer${activeBouncers > 1 ? 's' : ''}`;
+  }
+
+  renderBars('cSites', ov.top_sites, '', 'setSiteFilter');
+  renderBars('cScenarios', ov.top_scenarios, 'scen', 'setScenarioFilter');
+  renderBars('cCountries', ov.top_countries, 'ctry', null);
+  renderHourly(ov.hourly_24h);
+
+  syncSelect('siteSelect', ov.filter_sites, 'All Sites');
+  syncSelect('scenSelect', ov.filter_scenarios, 'All Scenarios');
+
+  const srcBody = document.getElementById('sourcesBody');
+  const srcs = (ov.metrics && ov.metrics.sources) || [];
+  srcBody.innerHTML = srcs.length ? srcs.map(s => `
+    <tr>
+      <td><span class="pill site">${esc(s.site)}</span></td>
+      <td class="mono muted">${esc(s.source)}</td>
+      <td>${s.read.toLocaleString()}</td>
+      <td>${s.parsed.toLocaleString()}</td>
+      <td>${s.unparsed.toLocaleString()}</td>
+    </tr>
+  `).join('') : '<tr><td colspan="5" class="muted">No acquisition metrics available</td></tr>';
+
+  renderBars('capiBody', (ov.metrics && ov.metrics.capi_breakdown) || [], 'scen', null);
+}
+
+async function loadAlerts() {
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    q: document.getElementById('qInput').value,
+    site: document.getElementById('siteSelect').value,
+    scenario: document.getElementById('scenSelect').value,
+    window: document.getElementById('winSelect').value,
+    hide_rbl: document.getElementById('hideRbl').checked ? '1' : '0',
+    active_only: document.getElementById('activeOnly').checked ? '1' : '0'
+  });
+  const data = await apiGet('/api/alerts?' + params.toString());
+  const tbody = document.getElementById('alertsBody');
+  if (!data.items || data.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="muted">No matching alerts found.</td></tr>';
+  } else {
+    tbody.innerHTML = data.items.map(al => {
+      const banLabel = activeBouncers > 0 ? 'ban' : 'would-ban';
+      const banCls = activeBouncers > 0 ? 'bad' : 'warn';
+      const banPill = al.active_ban
+        ? `<span class="pill ${banCls}">${banLabel} ${esc(al.ban_remaining)}</span>`
+        : `<span class="pill">expired</span>`;
+      const sites = (al.sites || []).map(s => `<span class="pill site">site: ${esc(s)}</span>`).join('');
+      const primarySite = (al.sites && al.sites[0]) || '';
+      const uris = (al.target_uris || []).slice(0, 4).map(u => {
+        const full = (al.sites && al.sites.length === 1) ? formatFullURL(primarySite, u) : u;
+        return `<span class="pill uri" title="${esc(full)}">${esc(full)}</span>`;
+      }).join('');
+      const moreUri = (al.target_uris || []).length > 4 ? `<span class="pill">+${al.target_uris.length - 4} more URIs</span>` : '';
+      const methods = (al.methods || []).map(m => `<span class="pill meta">${esc(m)}</span>`).join('');
+      const statuses = (al.statuses || []).map(st => `<span class="pill meta">${esc(st)}</span>`).join('');
+      return `<tr class="clickable" onclick="openAlert(${al.id})">
+        <td>
+          <div class="mono">${esc(al.created_at)}</div>
+          <div class="muted">#${al.id} - ${esc(al.age)}</div>
+        </td>
+        <td>
+          <div class="mono" style="font-weight:700;">${esc(al.source_ip)}</div>
+          <div class="muted">${flagEmoji(al.source_country) ? flagEmoji(al.source_country) + ' ' : ''}${esc(al.source_country || '?')} - AS${esc(al.source_as_number || '')} ${esc(al.source_as_name || '')}</div>
+        </td>
+        <td>
+          <div style="font-weight:600;">${esc(al.scenario)}</div>
+          <div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap;">
+            <span class="pill warn">${al.events_count} events</span>
+            ${banPill}
+          </div>
+        </td>
+        <td><div class="ctx-list">${sites}${uris}${moreUri}${methods}${statuses}</div></td>
+      </tr>`;
+    }).join('');
+  }
+  const totalPages = Math.max(1, Math.ceil(data.total / pageSize));
+  document.getElementById('pagerInfo').textContent = `Showing page ${data.page} of ${totalPages} (${data.total} alerts)`;
+  document.getElementById('prevBtn').disabled = data.page <= 1;
+  document.getElementById('nextBtn').disabled = data.page >= totalPages;
+}
+
+async function loadDecisions() {
+  const data = await apiGet('/api/decisions');
+  const tbody = document.getElementById('decisionsBody');
+  const items = data.items || [];
+  const decCls = activeBouncers > 0 ? 'bad' : 'warn';
+  const decPrefix = activeBouncers > 0 ? '' : 'alert-only: ';
+  tbody.innerHTML = items.length ? items.map(d => `
+    <tr>
+      <td class="mono">#${d.id}</td>
+      <td class="mono" style="font-weight:700;">${esc(d.scope)}:${esc(d.value)}</td>
+      <td>${esc(d.scenario)}</td>
+      <td><span class="pill ${d.active ? decCls : ''}">${decPrefix}${esc(d.type)}</span></td>
+      <td class="mono muted">${esc(d.created_at)}</td>
+      <td>${d.active ? `<span class="pill ${decCls}">${esc(d.remaining)} left</span>` : '<span class="muted">expired</span>'} <span class="muted">(${esc(d.until)})</span></td>
+    </tr>
+  `).join('') : '<tr><td colspan="6" class="muted">No local decisions found.</td></tr>';
+}
+
+async function openAlert(id) {
+  const al = await apiGet('/api/alert/' + id);
+  document.getElementById('mTitle').textContent = `Alert #${al.id}: ${al.scenario}`;
+  const mFlag = flagEmoji(al.source_country);
+  document.getElementById('mSub').textContent = `${al.source_ip} (${mFlag ? mFlag + ' ' : ''}${al.source_country} / ${al.source_as_name}) at ${al.created_at}`;
+  const evs = al.events || [];
+  document.getElementById('mBody').innerHTML = evs.length ? evs.map((ev, i) => `
+    <div class="ev-card">
+      <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <strong>Event ${i+1}</strong>
+        <span class="pill site">${esc(ev.site)}</span>
+        ${ev.method ? `<span class="pill meta">${esc(ev.method)}</span>` : ''}
+        ${ev.status ? `<span class="pill meta">${esc(ev.status)}</span>` : ''}
+      </div>
+      <div class="ev-grid">
+        <div class="muted">Time</div><div class="mono">${esc(ev.time)}</div>
+        <div class="muted">Log File</div><div class="mono">${esc(ev.datasource_path)}</div>
+        ${ev.target_uri ? `<div class="muted">Full URL</div><div class="mono">${esc(formatFullURL(ev.site, ev.target_uri))}</div>` : ''}
+        ${ev.target_uri ? `<div class="muted">Target URI</div><div class="mono">${esc(ev.target_uri)}</div>` : ''}
+        ${ev.user_agent ? `<div class="muted">User Agent</div><div class="mono">${esc(ev.user_agent)}</div>` : ''}
+        ${ev.target_user ? `<div class="muted">Target User</div><div class="mono">${esc(ev.target_user)}</div>` : ''}
+      </div>
+    </div>
+  `).join('') : '<div class="muted">No event payload stored for this alert.</div>';
+  document.getElementById('modalBg').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modalBg').classList.add('hidden');
+}
+
+const currentUser = '{{.Username}}';
+const isAdmin = {{.IsAdmin}};
+
+function showMsg(elId, ok, text) {
+  const el = document.getElementById(elId);
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+  el.textContent = text;
+}
+
+async function apiPost(url, payload) {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (res.status === 401) {
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+function openPwModal() {
+  document.getElementById('pwMsg').className = 'msg hidden';
+  document.getElementById('curPass').value = '';
+  document.getElementById('newPass1').value = '';
+  document.getElementById('newPass2').value = '';
+  document.getElementById('pwModalBg').classList.remove('hidden');
+}
+
+function closePwModal() {
+  document.getElementById('pwModalBg').classList.add('hidden');
+}
+
+async function submitChangePassword(e) {
+  e.preventDefault();
+  const cur = document.getElementById('curPass').value;
+  const p1 = document.getElementById('newPass1').value;
+  const p2 = document.getElementById('newPass2').value;
+  if (p1 !== p2) {
+    showMsg('pwMsg', false, 'New passwords do not match.');
+    return false;
+  }
+  try {
+    await apiPost('/api/account/password', { current_password: cur, new_password: p1 });
+    showMsg('pwMsg', true, 'Password updated successfully.');
+    document.getElementById('curPass').value = '';
+    document.getElementById('newPass1').value = '';
+    document.getElementById('newPass2').value = '';
+  } catch (err) {
+    showMsg('pwMsg', false, err.message);
+  }
+  return false;
+}
+
+async function loadUsers() {
+  if (!isAdmin) return;
+  const data = await apiGet('/api/users');
+  const tbody = document.getElementById('usersBody');
+  const items = data.items || [];
+  tbody.innerHTML = items.length ? items.map(u => {
+    const isSelf = u.username.toLowerCase() === currentUser.toLowerCase();
+    const rolePill = u.role === 'admin' ? '<span class="pill warn">admin</span>' : '<span class="pill site">viewer</span>';
+    return `<tr>
+      <td class="mono" style="font-weight:700;">${esc(u.username)} ${isSelf ? '<span class="muted">(you)</span>' : ''}</td>
+      <td>${rolePill}</td>
+      <td class="mono muted">${esc(u.created_at || '-')}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="openResetModal('${esc(u.username).replace(/'/g,"\\'")}')">Reset Password</button>
+        ${isSelf ? '' : `<button class="danger" onclick="deleteUser('${esc(u.username).replace(/'/g,"\\'")}')">Delete</button>`}
+      </td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="4" class="muted">No users found.</td></tr>';
+}
+
+async function createUser(e) {
+  e.preventDefault();
+  const username = document.getElementById('newUsername').value.trim();
+  const password = document.getElementById('newUserPass').value;
+  const role = document.getElementById('newUserRole').value;
+  try {
+    await apiPost('/api/users', { username, password, role });
+    showMsg('userMsg', true, 'User "' + username + '" created.');
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newUserPass').value = '';
+    await loadUsers();
+  } catch (err) {
+    showMsg('userMsg', false, err.message);
+  }
+  return false;
+}
+
+function openResetModal(username) {
+  document.getElementById('resetMsg').className = 'msg hidden';
+  document.getElementById('resetTargetUser').value = username;
+  document.getElementById('resetTargetLbl').textContent = 'Account: ' + username;
+  document.getElementById('resetNewPass').value = '';
+  document.getElementById('resetPwModalBg').classList.remove('hidden');
+}
+
+function closeResetModal() {
+  document.getElementById('resetPwModalBg').classList.add('hidden');
+}
+
+async function submitAdminResetPassword(e) {
+  e.preventDefault();
+  const username = document.getElementById('resetTargetUser').value;
+  const new_password = document.getElementById('resetNewPass').value;
+  try {
+    await apiPost('/api/users/password', { username, new_password });
+    showMsg('resetMsg', true, 'Password reset for "' + username + '".');
+    document.getElementById('resetNewPass').value = '';
+  } catch (err) {
+    showMsg('resetMsg', false, err.message);
+  }
+  return false;
+}
+
+async function deleteUser(username) {
+  if (!confirm('Delete user "' + username + '"?')) return;
+  try {
+    await apiPost('/api/users/delete', { username });
+    showMsg('userMsg', true, 'User "' + username + '" deleted.');
+    await loadUsers();
+  } catch (err) {
+    showMsg('userMsg', false, err.message);
+  }
+}
+
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  ['alerts', 'decisions', 'sources', 'users'].forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.classList.toggle('hidden', t !== name);
+  });
+  if (name === 'decisions') loadDecisions();
+  if (name === 'users') loadUsers();
+}
+
+async function refreshAll() {
+  await loadOverview();
+  if (currentTab === 'alerts') await loadAlerts();
+  if (currentTab === 'decisions') await loadDecisions();
+  if (currentTab === 'users') await loadUsers();
+}
+
+setInterval(() => {
+  if (document.getElementById('autoRefresh').checked) refreshAll();
+}, 30000);
+
+refreshAll();
+</script>
+</body>
+</html>

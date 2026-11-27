@@ -1,0 +1,28 @@
+#!/bin/sh
+# PROVIDE: crowdsec_ui
+# REQUIRE: NETWORKING crowdsec
+# KEYWORD: shutdown
+# Author: 9M2PJU
+
+. /etc/rc.subr
+
+name="crowdsec_ui"
+rcvar="crowdsec_ui_enable"
+load_rc_config "$name"
+
+: ${crowdsec_ui_enable:="NO"}
+: ${crowdsec_ui_config:="/usr/local/etc/crowdsec-ui/config.json"}
+: ${crowdsec_ui_pidfile:="/var/run/crowdsec-ui/crowdsec_ui.pid"}
+
+pidfile="$crowdsec_ui_pidfile"
+procname="/usr/local/bin/crowdsec-ui"
+command="/usr/sbin/daemon"
+command_args="-f -p ${pidfile} -o /var/log/crowdsec-ui/crowdsec-ui.log -t crowdsec_ui ${procname} -c ${crowdsec_ui_config}"
+
+start_precmd="crowdsec_ui_precmd"
+
+crowdsec_ui_precmd() {
+    mkdir -p /var/run/crowdsec-ui /var/log/crowdsec-ui
+}
+
+run_rc_command "$1"

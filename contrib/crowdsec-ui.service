@@ -1,0 +1,18 @@
+[Unit]
+Description=9M2PJU Security Console (Read-Only Threat Telemetry UI)
+After=network-online.target crowdsec.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/crowdsec-ui -c /etc/crowdsec-ui/config.json
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/crowdsec/data
+ReadWritePaths=/etc/crowdsec-ui
+
+[Install]
+WantedBy=multi-user.target

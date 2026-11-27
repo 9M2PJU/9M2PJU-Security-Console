@@ -1,0 +1,20 @@
+{
+  "listen_addr": "127.0.0.1:8082",
+  "db_path": "/var/lib/crowdsec/data/crowdsec.db",
+  "metrics_url": "http://127.0.0.1:6060/metrics",
+  "users": [
+    {
+      "username": "admin",
+      "password_hash": "REPLACE_WITH_OUTPUT_OF_crowdsec-ui_-hash-password",
+      "role": "admin",
+      "created_at": "2026-01-01 00:00:00"
+    }
+  ],
+  "session_secret": "REPLACE_WITH_OUTPUT_OF_crowdsec-ui_-gen-secret",
+  "session_ttl_min": 720,
+  "timezone": "UTC",
+  "site_map": {
+    "/site-a_": "site-a.example.com",
+    "/site-b_": "site-b.example.com"
+  }
+}

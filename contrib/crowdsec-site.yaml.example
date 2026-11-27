@@ -1,0 +1,5 @@
+# Optional CrowdSec context file to forward site metadata.
+# Place in /etc/crowdsec/contexts/site.yaml (or /usr/local/etc/crowdsec/contexts/ on FreeBSD).
+context:
+  site:
+    - evt.Meta.site
