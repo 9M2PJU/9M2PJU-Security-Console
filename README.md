@@ -37,6 +37,27 @@ Developed by **9M2PJU** (`https://hamradio.my`).
   - **User Management** tab (`admin` role only) to create `viewer` (read-only) or `admin` accounts, reset passwords, and delete accounts (immediately invalidating deleted user sessions).
 - **Self-Contained Assets:** Custom SVG shield/radar emblem and embedded `/favicon.ico`, `/favicon.svg`, and `/apple-touch-icon.png` routes.
 
+## Enforcement Modes Explained
+
+This console reads the `bouncers` table inside CrowdSec's SQLite database directly so operators never have to guess whether CrowdSec is passively observing or actively dropping traffic:
+
+| Mode / Stage | Active Bouncers | Console Header & Pill | Network / Firewall Effect | Recommended Use |
+| :--- | :--- | :--- | :--- | :--- |
+| **Mode 0: Monitor-Only (Alert-Only)** | `0` registered | **Monitor Only (Not Blocking)** + `would-ban` | **No traffic blocked.** Security Engine parses logs, logs alerts, creates local decisions in SQLite, and forwards telemetry. | Initial deployment, tuning log parsers/whitelists, and auditing noisy scanners safely. |
+| **Simulation Mode** (`cscli simulation enable`) | `0` or `1+` | Decisions tagged as simulated | **No traffic blocked for simulated scenarios**, even if a bouncer is already installed. | Rolling out new CrowdSec collections or testing aggressive HTTP rules in production. |
+| **Enforcing Mode** | `1+` active | **Enforcing (N Bouncer(s))** + `ban` | **Actively blocking.** Bouncers (`cs-firewall-bouncer` for PF/nftables/iptables, Nginx, or Cloudflare bouncers) enforce bans and captchas. | Production protection after confirming zero false positives in Monitor-Only / Simulation. |
+
+### Local Decisions vs CAPI Community Bans
+- **Local Flagged Decisions / Active Local Bans:** Generated when scenarios trigger against your own server's logs (`/var/log/nginx/*`, `/var/log/auth.log`, `/var/log/maillog`, etc.). When `0` bouncers are active, the console labels these **`Flagged Decisions (Alert-Only)`** with **`would-ban`** badges; once a bouncer connects, they become **`ban`**.
+- **CAPI Community Bans:** Shared blocklist IPs pulled from CrowdSec Central API (`CAPI`). Downloading the community list does not block anything unless at least one active bouncer is running.
+
+You can double-check enforcement state on the host at any time:
+```bash
+sudo cscli bouncers list      # Shows connected remediation components (empty = Monitor-Only)
+sudo cscli simulation status  # Shows which scenarios are running in dry-run simulation
+sudo cscli decisions list     # Lists active local decisions
+```
+
 ## Installation
 
 ### Option 1: One-Line Installer (Linux & FreeBSD, Prebuilt Releases)
@@ -50,7 +71,7 @@ curl -fsSL https://raw.githubusercontent.com/9M2PJU/9M2PJU-Security-Console/main
 Useful installer flags:
 ```bash
 # Install a specific tag without touching systemd/rc.d
-sudo sh install.sh --version v1.1.0 --no-service
+sudo sh install.sh --version v1.1.1 --no-service
 
 # Uninstall binary and service (preserves config.json)
 sudo sh install.sh --uninstall
@@ -62,20 +83,20 @@ Prebuilt `.deb`, `.rpm`, and Arch Linux `.pkg.tar.zst` packages (for `amd64`/`x8
 
 **Debian / Ubuntu (`.deb`):**
 ```bash
-curl -fsSLO https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.0/9m2pju-security-console_1.1.0-1_amd64.deb
-sudo apt install ./9m2pju-security-console_1.1.0-1_amd64.deb
+curl -fsSLO https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.1/9m2pju-security-console_1.1.1-1_amd64.deb
+sudo apt install ./9m2pju-security-console_1.1.1-1_amd64.deb
 ```
 
 **RHEL / Rocky / AlmaLinux / Fedora (`.rpm`):**
 ```bash
-sudo dnf install https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.0/9m2pju-security-console-1.1.0-1.x86_64.rpm
+sudo dnf install https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.1/9m2pju-security-console-1.1.1-1.x86_64.rpm
 ```
 
 **Arch Linux (prebuilt `.pkg.tar.zst` or `PKGBUILD`):**
 ```bash
 # Prebuilt package from GitHub Releases:
-curl -fsSLO https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.0/9m2pju-security-console-1.1.0-1-x86_64.pkg.tar.zst
-sudo pacman -U 9m2pju-security-console-1.1.0-1-x86_64.pkg.tar.zst
+curl -fsSLO https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.1/9m2pju-security-console-1.1.1-1-x86_64.pkg.tar.zst
+sudo pacman -U 9m2pju-security-console-1.1.1-1-x86_64.pkg.tar.zst
 
 # Or build natively from PKGBUILD:
 cd packaging/arch && makepkg -si

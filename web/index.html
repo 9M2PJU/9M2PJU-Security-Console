@@ -392,7 +392,7 @@
       </div>
       <span class="pill">{{.Hostname}}</span>
       <span id="engStatus" class="pill ok"><span id="engDot" class="dot"></span> Checking engine...</span>
-      <span id="modePill" class="pill warn">Checking mode...</span>
+      <span id="modePill" class="pill warn" onclick="switchTab('sources')" style="cursor:pointer;" title="Click to view enforcement mode details">Checking mode...</span>
       <span id="lastSync" class="muted"></span>
     </div>
     <div class="actions">
@@ -405,6 +405,7 @@
 
   <div id="modeBanner" class="msg hidden" style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);color:#fde68a;">
     <strong>Monitor-Only Mode (0 bouncers active):</strong> Attacks below are detected and flagged in the local database, not actively blocked by a firewall bouncer yet.
+    <a href="#modesGuide" onclick="switchTab('sources');return false;" style="margin-left:8px;color:#fde68a;text-decoration:underline;">View Mode Guide</a>
   </div>
 
   <section class="kpis">
@@ -505,6 +506,45 @@
       <div class="panel">
         <h2>CAPI Community Blocklist Breakdown</h2>
         <div id="capiBody"></div>
+      </div>
+    </div>
+
+    <div id="modesGuide" class="panel" style="margin-top:14px;">
+      <h2>Enforcement Modes &amp; Telemetry Guide</h2>
+      <div class="table-wrap" style="border:0;">
+        <table>
+          <thead>
+            <tr>
+              <th>Mode / State</th>
+              <th>Active Bouncers</th>
+              <th>Console Indicator</th>
+              <th>What Happens to Traffic</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Mode 0: Monitor-Only (Alert-Only)</strong></td>
+              <td><code>0</code> connected</td>
+              <td><span class="pill warn">Monitor Only (Not Blocking)</span> &middot; <code>would-ban</code></td>
+              <td>CrowdSec parses logs, records alerts and flagged decisions in SQLite, and telemetry flows normally. Zero packets or IPs are dropped because no bouncer is attached.</td>
+            </tr>
+            <tr>
+              <td><strong>Simulation Mode</strong> (<code>cscli simulation</code>)</td>
+              <td><code>0</code> or <code>1+</code></td>
+              <td>Marked <code>simulated</code> in scenario config</td>
+              <td>Even when a firewall or proxy bouncer is running, simulated scenarios stay dry-run so you can tune false positives before enforcing real bans.</td>
+            </tr>
+            <tr>
+              <td><strong>Enforcing Mode</strong></td>
+              <td><code>1+</code> connected</td>
+              <td><span class="pill ok">Enforcing (N Bouncers)</span> &middot; <code>ban</code></td>
+              <td>Remediation components (PF / nftables / iptables firewall bouncer, Nginx, or Cloudflare bouncer) poll LAPI and actively block or challenge offending IPs.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="muted" style="font-size:0.8rem;margin-top:10px;line-height:1.5;">
+        <strong>Local vs CAPI Decisions:</strong> <em>Active Local Bans</em> (or flagged local decisions when <code>0</code> bouncers are active) come from attacks detected in this host's own logs. <em>CAPI Community Bans</em> are shared CrowdSec threat-intelligence blocklists synced from LAPI and are only enforced on the firewall if an active bouncer is running. Inspect directly on the host with <code>cscli bouncers list</code>, <code>cscli simulation status</code>, and <code>cscli decisions list</code>.
       </div>
     </div>
   </div>
