@@ -392,7 +392,7 @@
       </div>
       <span class="pill">{{.Hostname}}</span>
       <span id="engStatus" class="pill ok"><span id="engDot" class="dot"></span> Checking engine...</span>
-      <span id="modePill" class="pill warn" onclick="switchTab('sources')" style="cursor:pointer;" title="Click to view enforcement mode details">Checking mode...</span>
+      <span id="modePill" class="pill warn" onclick="openModesGuide()" style="cursor:pointer;" title="Click to view enforcement mode details">Checking mode...</span>
       <span id="lastSync" class="muted"></span>
     </div>
     <div class="actions">
@@ -405,7 +405,7 @@
 
   <div id="modeBanner" class="msg hidden" style="background:rgba(245,158,11,0.10);border:1px solid rgba(245,158,11,0.35);color:#fde68a;">
     <strong>Monitor-Only Mode (0 bouncers active):</strong> Attacks below are detected and flagged in the local database, not actively blocked by a firewall bouncer yet.
-    <a href="#modesGuide" onclick="switchTab('sources');return false;" style="margin-left:8px;color:#fde68a;text-decoration:underline;">View Mode Guide</a>
+    <a href="#modesGuide" onclick="openModesGuide();return false;" style="margin-left:8px;color:#fde68a;text-decoration:underline;">View Mode Guide</a>
   </div>
 
   <section class="kpis">
@@ -1125,9 +1125,30 @@ function switchTab(name) {
     const el = document.getElementById('tab-' + t);
     if (el) el.classList.toggle('hidden', t !== name);
   });
+  if (name !== 'sources' && window.location.hash === '#modesGuide') {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
   if (name === 'decisions') loadDecisions();
   if (name === 'users') loadUsers();
 }
+
+function openModesGuide() {
+  switchTab('sources');
+  if (window.location.hash !== '#modesGuide') {
+    history.replaceState(null, '', '#modesGuide');
+  }
+  requestAnimationFrame(() => {
+    const el = document.getElementById('modesGuide');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+function handleHash() {
+  if (window.location.hash === '#modesGuide') {
+    openModesGuide();
+  }
+}
+window.addEventListener('hashchange', handleHash);
 
 function anyModalOpen() {
   return ['modalBg', 'pwModalBg', 'resetPwModalBg'].some(id => {
@@ -1147,7 +1168,13 @@ setInterval(() => {
   if (document.getElementById('autoRefresh').checked && !anyModalOpen()) refreshAll(false);
 }, 30000);
 
-refreshAll(false);
+handleHash();
+refreshAll(false).then(() => {
+  if (window.location.hash === '#modesGuide') {
+    const el = document.getElementById('modesGuide');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
 </script>
 </body>
 </html>
