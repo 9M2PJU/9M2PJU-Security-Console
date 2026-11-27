@@ -1,0 +1,64 @@
+name: "9m2pju-security-console"
+arch: "${GOARCH}"
+platform: "linux"
+version: "${VERSION}"
+release: "1"
+section: "net"
+priority: "optional"
+maintainer: "9M2PJU <9m2pju@gmail.com>"
+description: |
+  Lightweight single-binary Go web security console for monitoring CrowdSec
+  detections, active decisions, multi-vhost targets, and acquisition health.
+vendor: "9M2PJU"
+homepage: "https://github.com/9M2PJU/9M2PJU-Security-Console"
+license: "AGPL-3.0-or-later"
+
+contents:
+  - src: "${BIN_PATH}"
+    dst: "/usr/bin/crowdsec-ui"
+    file_info:
+      mode: 0755
+
+  - src: "packaging/crowdsec-ui.service"
+    dst: "/usr/lib/systemd/system/crowdsec-ui.service"
+    file_info:
+      mode: 0644
+
+  - src: "config.example.json"
+    dst: "/etc/crowdsec-ui/config.example.json"
+    type: "config"
+    file_info:
+      mode: 0644
+
+  - src: "README.md"
+    dst: "/usr/share/doc/9m2pju-security-console/README.md"
+    file_info:
+      mode: 0644
+
+  - src: "LICENSE"
+    dst: "/usr/share/licenses/9m2pju-security-console/LICENSE"
+    file_info:
+      mode: 0644
+
+  - src: "contrib/nginx-mtls.conf.example"
+    dst: "/usr/share/doc/9m2pju-security-console/examples/nginx-mtls.conf.example"
+    file_info:
+      mode: 0644
+
+  - src: "contrib/crowdsec-site-enrich.yaml.example"
+    dst: "/usr/share/doc/9m2pju-security-console/examples/crowdsec-site-enrich.yaml.example"
+    file_info:
+      mode: 0644
+
+  - src: "contrib/crowdsec-site.yaml.example"
+    dst: "/usr/share/doc/9m2pju-security-console/examples/crowdsec-site.yaml.example"
+    file_info:
+      mode: 0644
+
+scripts:
+  postinstall: "packaging/scripts/postinstall.sh"
+  preremove: "packaging/scripts/preremove.sh"
+
+rpm:
+  group: "Applications/Internet"
+  compression: "gzip"

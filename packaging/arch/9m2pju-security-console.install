@@ -1,0 +1,26 @@
+post_install() {
+  mkdir -p /etc/crowdsec-ui
+  chmod 0700 /etc/crowdsec-ui
+  if [ ! -f /etc/crowdsec-ui/config.json ] && [ -x /usr/bin/crowdsec-ui ]; then
+    /usr/bin/crowdsec-ui -c /etc/crowdsec-ui/config.json -init-config -init-user admin -init-db /var/lib/crowdsec/data/crowdsec.db
+  fi
+  if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    echo "Enable and start service: sudo systemctl enable --now crowdsec-ui"
+  fi
+}
+
+post_upgrade() {
+  if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if systemctl is-active --quiet crowdsec-ui >/dev/null 2>&1; then
+      systemctl restart crowdsec-ui >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+pre_remove() {
+  if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now crowdsec-ui >/dev/null 2>&1 || true
+  fi
+}

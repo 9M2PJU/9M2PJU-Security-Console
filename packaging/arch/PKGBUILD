@@ -1,0 +1,34 @@
+# Maintainer: 9M2PJU <9m2pju@gmail.com>
+pkgname=9m2pju-security-console
+pkgver=1.1.0
+pkgrel=1
+pkgdesc="Lightweight single-binary Go web security console for CrowdSec"
+arch=('x86_64' 'aarch64')
+url="https://github.com/9M2PJU/9M2PJU-Security-Console"
+license=('AGPL-3.0-or-later')
+makedepends=('go')
+optdepends=(
+  'crowdsec: local CrowdSec daemon and SQLite database'
+  'nginx: TLS and mTLS reverse proxy'
+)
+install=9m2pju-security-console.install
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "9M2PJU-Security-Console-${pkgver}"
+  export CGO_ENABLED=0
+  go build -trimpath -ldflags="-s -w" -o crowdsec-ui .
+}
+
+package() {
+  cd "9M2PJU-Security-Console-${pkgver}"
+  install -Dm755 crowdsec-ui "${pkgdir}/usr/bin/crowdsec-ui"
+  install -Dm644 packaging/crowdsec-ui.service "${pkgdir}/usr/lib/systemd/system/crowdsec-ui.service"
+  install -Dm644 config.example.json "${pkgdir}/etc/crowdsec-ui/config.example.json"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 contrib/nginx-mtls.conf.example "${pkgdir}/usr/share/doc/${pkgname}/examples/nginx-mtls.conf.example"
+  install -Dm644 contrib/crowdsec-site-enrich.yaml.example "${pkgdir}/usr/share/doc/${pkgname}/examples/crowdsec-site-enrich.yaml.example"
+  install -Dm644 contrib/crowdsec-site.yaml.example "${pkgdir}/usr/share/doc/${pkgname}/examples/crowdsec-site.yaml.example"
+}

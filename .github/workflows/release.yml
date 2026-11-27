@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   build:
@@ -18,10 +19,23 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Build release archives
+      - name: Install nFPM
+        run: |
+          NFPM_VER="2.43.1"
+          curl -fsSL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VER}/nfpm_${NFPM_VER}_Linux_x86_64.tar.gz" -o /tmp/nfpm.tar.gz
+          tar -xzf /tmp/nfpm.tar.gz -C /tmp nfpm
+          sudo install -m 0755 /tmp/nfpm /usr/local/bin/nfpm
+          rm -f /tmp/nfpm.tar.gz /tmp/nfpm
+
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Build release archives and OS packages
         run: |
           TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
           mkdir -p dist
+          chmod +x packaging/scripts/*.sh
           for target in linux/amd64 linux/arm64 freebsd/amd64 freebsd/arm64; do
             GOOS="${target%/*}"
             GOARCH="${target#*/}"
@@ -31,12 +45,52 @@ jobs:
             cp README.md LICENSE config.example.json "${STAGE}/"
             cp contrib/* "${STAGE}/contrib/"
             tar -czf "dist/9M2PJU-Security-Console-${TAG}-${GOOS}-${GOARCH}.tar.gz" -C "${STAGE}" .
+            if [ "$GOOS" = "linux" ]; then
+              sed -e "s|\${GOARCH}|${GOARCH}|g" \
+                  -e "s|\${VERSION}|${VERSION}|g" \
+                  -e "s|\${BIN_PATH}|${STAGE}/crowdsec-ui|g" \
+                  packaging/nfpm.yaml > "${STAGE}/nfpm.yaml"
+              for pkgfmt in deb rpm archlinux; do
+                nfpm pkg -f "${STAGE}/nfpm.yaml" -p "$pkgfmt" -t dist/
+              done
+            fi
             rm -rf "${STAGE}"
           done
-          (cd dist && sha256sum *.tar.gz > SHA256SUMS.txt)
+          (cd dist && sha256sum *.tar.gz *.deb *.rpm *.pkg.tar.zst > SHA256SUMS.txt)
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/9m2pju/9m2pju-security-console
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

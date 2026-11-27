@@ -158,7 +158,7 @@
   .kpi .sub { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
   .charts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
     gap: 12px;
     margin-bottom: 18px;
   }
@@ -418,8 +418,9 @@
   <section class="charts">
     <div class="panel"><h2>Top Attacked Sites (24h) <span class="muted">click to filter</span></h2><div id="cSites"></div></div>
     <div class="panel"><h2>Top Scenarios (24h) <span class="muted">click to filter</span></h2><div id="cScenarios"></div></div>
+    <div class="panel"><h2>Top Attacker IPs (24h) <span class="muted">click to filter</span></h2><div id="cIPs"></div></div>
     <div class="panel"><h2>24h Alerts Timeline ({{.TZName}})</h2><div id="cHourly" class="hour-chart"></div></div>
-    <div class="panel"><h2>Top Source Countries (24h)</h2><div id="cCountries"></div></div>
+    <div class="panel"><h2>Top Source Countries (24h) <span class="muted">click to filter</span></h2><div id="cCountries"></div></div>
   </section>
 
   <div class="tabs">
@@ -434,6 +435,7 @@
       <input type="text" id="qInput" placeholder="Search IP, ASN, country, site, target_uri, user-agent..." oninput="debouncedLoadAlerts()">
       <select id="siteSelect" onchange="page=1;loadAlerts()"><option value="">All Sites</option></select>
       <select id="scenSelect" onchange="page=1;loadAlerts()"><option value="">All Scenarios</option></select>
+      <select id="ctrySelect" onchange="page=1;loadAlerts()"><option value="">All Countries</option></select>
       <select id="winSelect" onchange="page=1;loadAlerts()">
         <option value="24h">Last 24h</option>
         <option value="1h">Last 1h</option>
@@ -443,6 +445,8 @@
       <label class="chk"><input type="checkbox" id="hideRbl" onchange="page=1;loadAlerts()"> Hide postscreen-rbl</label>
       <label class="chk"><input type="checkbox" id="activeOnly" onchange="page=1;loadAlerts()"> Active bans only</label>
       <button onclick="resetFilters()">Reset</button>
+      <button onclick="exportAlerts('csv')">Export CSV</button>
+      <button onclick="exportAlerts('json')">Export JSON</button>
     </div>
 
     <div class="table-wrap">
@@ -713,10 +717,48 @@ function setScenarioFilter(scen) {
   loadAlerts();
 }
 
+function setCountryFilter(ctry) {
+  document.getElementById('ctrySelect').value = ctry;
+  switchTab('alerts');
+  page = 1;
+  loadAlerts();
+}
+
+function setIPFilter(ip) {
+  document.getElementById('qInput').value = ip;
+  switchTab('alerts');
+  page = 1;
+  loadAlerts();
+}
+
+function alertFilterParams(includePaging) {
+  const obj = {
+    q: document.getElementById('qInput').value,
+    site: document.getElementById('siteSelect').value,
+    scenario: document.getElementById('scenSelect').value,
+    country: document.getElementById('ctrySelect').value,
+    window: document.getElementById('winSelect').value,
+    hide_rbl: document.getElementById('hideRbl').checked ? '1' : '0',
+    active_only: document.getElementById('activeOnly').checked ? '1' : '0'
+  };
+  if (includePaging) {
+    obj.page = String(page);
+    obj.page_size = String(pageSize);
+  }
+  return new URLSearchParams(obj);
+}
+
+function exportAlerts(fmt) {
+  const params = alertFilterParams(false);
+  params.set('format', fmt);
+  window.location.href = '/api/alerts/export?' + params.toString();
+}
+
 function resetFilters() {
   document.getElementById('qInput').value = '';
   document.getElementById('siteSelect').value = '';
   document.getElementById('scenSelect').value = '';
+  document.getElementById('ctrySelect').value = '';
   document.getElementById('winSelect').value = '24h';
   document.getElementById('hideRbl').checked = false;
   document.getElementById('activeOnly').checked = false;
@@ -741,8 +783,8 @@ async function apiGet(url) {
   return res.json();
 }
 
-async function loadOverview() {
-  const ov = await apiGet('/api/overview');
+async function loadOverview(force = false) {
+  const ov = await apiGet('/api/overview' + (force ? '?refresh=1' : ''));
   document.getElementById('kAlerts24h').textContent = ov.alerts_24h;
   document.getElementById('kTotalAlerts').textContent = 'Total in DB: ' + ov.total_alerts;
   document.getElementById('kActiveBans').textContent = ov.active_local_bans;
@@ -784,11 +826,13 @@ async function loadOverview() {
 
   renderBars('cSites', ov.top_sites, '', 'setSiteFilter');
   renderBars('cScenarios', ov.top_scenarios, 'scen', 'setScenarioFilter');
-  renderBars('cCountries', ov.top_countries, 'ctry', null);
+  renderBars('cIPs', ov.top_ips, '', 'setIPFilter');
+  renderBars('cCountries', ov.top_countries, 'ctry', 'setCountryFilter');
   renderHourly(ov.hourly_24h);
 
   syncSelect('siteSelect', ov.filter_sites, 'All Sites');
   syncSelect('scenSelect', ov.filter_scenarios, 'All Scenarios');
+  syncSelect('ctrySelect', ov.filter_countries, 'All Countries');
 
   const srcBody = document.getElementById('sourcesBody');
   const srcs = (ov.metrics && ov.metrics.sources) || [];
@@ -806,16 +850,7 @@ async function loadOverview() {
 }
 
 async function loadAlerts() {
-  const params = new URLSearchParams({
-    page: String(page),
-    page_size: String(pageSize),
-    q: document.getElementById('qInput').value,
-    site: document.getElementById('siteSelect').value,
-    scenario: document.getElementById('scenSelect').value,
-    window: document.getElementById('winSelect').value,
-    hide_rbl: document.getElementById('hideRbl').checked ? '1' : '0',
-    active_only: document.getElementById('activeOnly').checked ? '1' : '0'
-  });
+  const params = alertFilterParams(true);
   const data = await apiGet('/api/alerts?' + params.toString());
   const tbody = document.getElementById('alertsBody');
   if (!data.items || data.items.length === 0) {
@@ -1054,18 +1089,25 @@ function switchTab(name) {
   if (name === 'users') loadUsers();
 }
 
-async function refreshAll() {
-  await loadOverview();
+function anyModalOpen() {
+  return ['modalBg', 'pwModalBg', 'resetPwModalBg'].some(id => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains('hidden');
+  });
+}
+
+async function refreshAll(force = true) {
+  await loadOverview(force);
   if (currentTab === 'alerts') await loadAlerts();
   if (currentTab === 'decisions') await loadDecisions();
   if (currentTab === 'users') await loadUsers();
 }
 
 setInterval(() => {
-  if (document.getElementById('autoRefresh').checked) refreshAll();
+  if (document.getElementById('autoRefresh').checked && !anyModalOpen()) refreshAll(false);
 }, 30000);
 
-refreshAll();
+refreshAll(false);
 </script>
 </body>
 </html>

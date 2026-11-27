@@ -28,11 +28,11 @@ Developed by **9M2PJU** (`https://hamradio.my`).
 
 ## Features
 
-- **Real-Time Overview & Charts:** 24h and total alert counts, unique attacker IPs, local vs CAPI blocklist breakdown, clickable **Top Attacked Sites**, clickable **Top Scenarios**, **24h Hourly Timeline**, and **Top Source Countries** with flag icons.
-- **Searchable Alerts Feed:** Filter by free-text (`IP`, `ASN`, `country`, `site`, `target_uri`, `user_agent`), `Site`, `Scenario`, time window (`1h`, `24h`, `7d`, `All`), active bans only, or hide noisy `postscreen-rbl` entries. Click any alert row to inspect every underlying event.
+- **Real-Time Overview & Charts:** 24h and total alert counts, unique attacker IPs, local vs CAPI blocklist breakdown, clickable **Top Attacked Sites**, clickable **Top Scenarios**, clickable **Top Attacker IPs**, **24h Hourly Timeline**, and clickable **Top Source Countries** with flag icons.
+- **Searchable Alerts Feed & Export:** Filter by free-text (`IP`, `ASN`, `country`, `site`, `target_uri`, `user_agent`), `Site`, `Scenario`, `Country`, time window (`1h`, `24h`, `7d`, `All`), active bans only, or hide noisy `postscreen-rbl` entries. Export matching alerts directly as **CSV** or **JSON** (`/api/alerts/export`, up to 5,000 rows). Click any alert row to inspect every underlying event.
 - **Active Decisions & Acquisition Health:** Inspect active local decisions with remaining TTL and live Prometheus reader/parser metrics per log file.
 - **Multi-User Auth & RBAC:**
-  - Built-in login screen with salted PBKDF2-SHA256 password hashing (`100,000` iterations), HMAC-SHA256 `HttpOnly` session cookies, and IP login rate limiting.
+  - Built-in login screen with salted PBKDF2-SHA256 password hashing (`100,000` iterations), HMAC-SHA256 `HttpOnly` session cookies, same-origin CSRF checks, IP login rate limiting, and structured `AUDIT` logs.
   - **Change Password** modal for every signed-in user.
   - **User Management** tab (`admin` role only) to create `viewer` (read-only) or `admin` accounts, reset passwords, and delete accounts (immediately invalidating deleted user sessions).
 - **Self-Contained Assets:** Custom SVG shield/radar emblem and embedded `/favicon.ico`, `/favicon.svg`, and `/apple-touch-icon.png` routes.
@@ -50,17 +50,46 @@ curl -fsSL https://raw.githubusercontent.com/9M2PJU/9M2PJU-Security-Console/main
 Useful installer flags:
 ```bash
 # Install a specific tag without touching systemd/rc.d
-sudo sh install.sh --version v1.0.0 --no-service
+sudo sh install.sh --version v1.1.0 --no-service
 
 # Uninstall binary and service (preserves config.json)
 sudo sh install.sh --uninstall
 ```
 
-### Option 2: Docker & Docker Compose
+### Option 2: Native Linux Packages (.deb, .rpm, Arch Linux)
 
-Run the ~25 MB Alpine image with CrowdSec's data directory mounted read-only:
+Prebuilt `.deb`, `.rpm`, and Arch Linux `.pkg.tar.zst` packages (for `amd64`/`x86_64` and `arm64`/`aarch64`) are published on [GitHub Releases](https://github.com/9M2PJU/9M2PJU-Security-Console/releases). Every package installs `/usr/bin/crowdsec-ui`, `/usr/lib/systemd/system/crowdsec-ui.service`, example configs under `/usr/share/doc/9m2pju-security-console/examples/`, and initializes `/etc/crowdsec-ui/config.json` on first install.
+
+**Debian / Ubuntu (`.deb`):**
+```bash
+curl -fsSLO https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.0/9m2pju-security-console_1.1.0-1_amd64.deb
+sudo apt install ./9m2pju-security-console_1.1.0-1_amd64.deb
+```
+
+**RHEL / Rocky / AlmaLinux / Fedora (`.rpm`):**
+```bash
+sudo dnf install https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.0/9m2pju-security-console-1.1.0-1.x86_64.rpm
+```
+
+**Arch Linux (prebuilt `.pkg.tar.zst` or `PKGBUILD`):**
+```bash
+# Prebuilt package from GitHub Releases:
+curl -fsSLO https://github.com/9M2PJU/9M2PJU-Security-Console/releases/download/v1.1.0/9m2pju-security-console-1.1.0-1-x86_64.pkg.tar.zst
+sudo pacman -U 9m2pju-security-console-1.1.0-1-x86_64.pkg.tar.zst
+
+# Or build natively from PKGBUILD:
+cd packaging/arch && makepkg -si
+```
+
+### Option 3: Docker & Docker Compose
+
+Pull the prebuilt multi-arch (~25 MB) Alpine image from GHCR or build locally with CrowdSec's data directory mounted read-only:
 
 ```bash
+# Quick run using the prebuilt GHCR image:
+docker pull ghcr.io/9m2pju/9m2pju-security-console:latest
+
+# Or via Docker Compose:
 git clone https://github.com/9M2PJU/9M2PJU-Security-Console.git
 cd 9M2PJU-Security-Console
 docker compose up -d
@@ -69,13 +98,16 @@ docker compose logs security-console   # Prints the generated first-boot admin p
 
 On FreeBSD or custom paths, edit the read-only volume in `docker-compose.yml` (for example `/var/db/crowdsec/data:/crowdsec-data:ro`). Supported environment overrides: `CROWDSEC_UI_LISTEN`, `CROWDSEC_UI_DB`, `CROWDSEC_UI_METRICS`, `CROWDSEC_UI_TIMEZONE`, `CROWDSEC_UI_HOSTNAME`, and `UI_ADMIN_USER`.
 
-### Option 3: Build From Source
+### Option 4: Build From Source
 
 Requires Go 1.26+ (no C compiler needed because `CGO_ENABLED=0` uses pure-Go SQLite):
 
 ```bash
 git clone https://github.com/9M2PJU/9M2PJU-Security-Console.git
 cd 9M2PJU-Security-Console
+
+# Run test suite
+go test -race ./...
 
 # Linux amd64
 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o crowdsec-ui .

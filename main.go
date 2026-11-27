@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"embed"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -157,6 +159,7 @@ type OverviewResponse struct {
 	Hourly24h       []HourBucket     `json:"hourly_24h"`
 	FilterSites     []string         `json:"filter_sites"`
 	FilterScenarios []string         `json:"filter_scenarios"`
+	FilterCountries []string         `json:"filter_countries"`
 	Metrics         MetricsSummary   `json:"metrics"`
 }
 
@@ -268,16 +271,21 @@ func verifyPassword(password, stored string) bool {
 }
 
 type App struct {
-	cfgMu    sync.RWMutex
-	cfgPath  string
-	cfg      Config
-	siteKeys []string
-	loc      *time.Location
-	hostname string
-	db       *sql.DB
-	limiter  *RateLimiter
-	loginT   *template.Template
-	indexT   *template.Template
+	cfgMu          sync.RWMutex
+	cfgPath        string
+	cfg            Config
+	siteKeys       []string
+	loc            *time.Location
+	hostname       string
+	db             *sql.DB
+	limiter        *RateLimiter
+	loginT         *template.Template
+	indexT         *template.Template
+	cacheMu        sync.Mutex
+	cachedAlerts   []AlertItem
+	cachedAlertsAt time.Time
+	cachedOV       OverviewResponse
+	cachedOVAt     time.Time
 }
 
 func parseCrowdSecTime(raw string) (time.Time, bool) {
@@ -657,6 +665,98 @@ func (a *App) loadAllAlerts(includeEvents bool) ([]AlertItem, error) {
 	return items, nil
 }
 
+func (a *App) loadAlertsCached(force bool) ([]AlertItem, error) {
+	a.cacheMu.Lock()
+	if !force && a.cachedAlerts != nil && time.Since(a.cachedAlertsAt) < 5*time.Second {
+		out := a.cachedAlerts
+		a.cacheMu.Unlock()
+		return out, nil
+	}
+	a.cacheMu.Unlock()
+
+	items, err := a.loadAllAlerts(false)
+	if err != nil {
+		return nil, err
+	}
+	a.cacheMu.Lock()
+	a.cachedAlerts = items
+	a.cachedAlertsAt = time.Now()
+	a.cacheMu.Unlock()
+	return items, nil
+}
+
+func (a *App) loadAlertByID(id int64) (AlertItem, bool, error) {
+	now := time.Now()
+	var it AlertItem
+	var createdStr string
+	err := a.db.QueryRow(`
+		SELECT id, created_at, scenario, COALESCE(events_count,0),
+		       COALESCE(source_ip,''), COALESCE(source_range,''),
+		       COALESCE(source_as_number,''), COALESCE(source_as_name,''),
+		       COALESCE(source_country,'')
+		FROM alerts WHERE id = ?
+	`, id).Scan(&it.ID, &createdStr, &it.Scenario, &it.EventsCount,
+		&it.SourceIP, &it.SourceRange, &it.ASNNumber, &it.ASNName, &it.Country)
+	if errors.Is(err, sql.ErrNoRows) {
+		return it, false, nil
+	}
+	if err != nil {
+		return it, false, err
+	}
+	if t, ok := parseCrowdSecTime(createdStr); ok {
+		it.CreatedTS = t.Unix()
+		it.CreatedAt = t.In(a.loc).Format("2006-01-02 15:04:05")
+		it.Age = humanDuration(now.Sub(t)) + " ago"
+	} else {
+		it.CreatedAt = createdStr
+	}
+
+	decRows, err := a.db.Query(`SELECT until FROM decisions WHERE origin = 'crowdsec' AND alert_decisions = ?`, id)
+	if err == nil {
+		defer decRows.Close()
+		var maxUntil time.Time
+		for decRows.Next() {
+			var untilStr string
+			if err := decRows.Scan(&untilStr); err != nil {
+				continue
+			}
+			if t, ok := parseCrowdSecTime(untilStr); ok && t.After(now) {
+				it.ActiveBan = true
+				it.BanCount++
+				if t.After(maxUntil) {
+					maxUntil = t
+				}
+			}
+		}
+		if it.ActiveBan {
+			it.BanRemaining = humanDuration(maxUntil.Sub(now))
+		}
+	}
+
+	evRows, err := a.db.Query(`SELECT serialized FROM events WHERE alert_events = ? ORDER BY id ASC`, id)
+	if err == nil {
+		defer evRows.Close()
+		for evRows.Next() {
+			var serialized string
+			if err := evRows.Scan(&serialized); err != nil {
+				continue
+			}
+			ev := a.parseEventSerialized(serialized)
+			it.Events = append(it.Events, ev)
+			it.Sites = appendUnique(it.Sites, ev.Site)
+			it.TargetURIs = appendUnique(it.TargetURIs, ev.TargetURI)
+			it.Methods = appendUnique(it.Methods, ev.Method)
+			it.Statuses = appendUnique(it.Statuses, ev.Status)
+			it.UserAgents = appendUnique(it.UserAgents, ev.UserAgent)
+			it.Datasources = appendUnique(it.Datasources, ev.DatasourcePath)
+		}
+	}
+	if len(it.Sites) == 0 {
+		it.Sites = []string{"unknown"}
+	}
+	return it, true, nil
+}
+
 func topNFromMap(m map[string]int64, limit int) []NameCount {
 	var out []NameCount
 	for k, v := range m {
@@ -677,8 +777,16 @@ func topNFromMap(m map[string]int64, limit int) []NameCount {
 	return out
 }
 
-func (a *App) buildOverview() (OverviewResponse, error) {
-	alerts, err := a.loadAllAlerts(false)
+func (a *App) buildOverview(force bool) (OverviewResponse, error) {
+	a.cacheMu.Lock()
+	if !force && a.cachedOVAt.After(time.Now().Add(-5*time.Second)) {
+		ov := a.cachedOV
+		a.cacheMu.Unlock()
+		return ov, nil
+	}
+	a.cacheMu.Unlock()
+
+	alerts, err := a.loadAlertsCached(force)
 	if err != nil {
 		return OverviewResponse{}, err
 	}
@@ -692,6 +800,7 @@ func (a *App) buildOverview() (OverviewResponse, error) {
 	uniqueIPs := make(map[string]struct{})
 	allSites := make(map[string]struct{})
 	allScenarios := make(map[string]struct{})
+	allCountries := make(map[string]struct{})
 
 	// Prepare 24 hourly buckets ending at current hour
 	curHour := time.Now().In(a.loc).Truncate(time.Hour)
@@ -705,6 +814,9 @@ func (a *App) buildOverview() (OverviewResponse, error) {
 	var alerts24h, activeBans int64
 	for _, al := range alerts {
 		allScenarios[al.Scenario] = struct{}{}
+		if al.Country != "" {
+			allCountries[al.Country] = struct{}{}
+		}
 		for _, s := range al.Sites {
 			allSites[s] = struct{}{}
 		}
@@ -739,7 +851,7 @@ func (a *App) buildOverview() (OverviewResponse, error) {
 		topSite = topSites[0].Name
 	}
 
-	var filterSites, filterScenarios []string
+	var filterSites, filterScenarios, filterCountries []string
 	for s := range allSites {
 		filterSites = append(filterSites, s)
 	}
@@ -748,13 +860,17 @@ func (a *App) buildOverview() (OverviewResponse, error) {
 		filterScenarios = append(filterScenarios, sc)
 	}
 	sort.Strings(filterScenarios)
+	for c := range allCountries {
+		filterCountries = append(filterCountries, c)
+	}
+	sort.Strings(filterCountries)
 
 	metrics := a.fetchPrometheusMetrics()
 
 	var activeBouncers int64
 	_ = a.db.QueryRow(`SELECT COUNT(*) FROM bouncers WHERE revoked = 0`).Scan(&activeBouncers)
 
-	return OverviewResponse{
+	ov := OverviewResponse{
 		GeneratedAt:     time.Now().In(a.loc).Format("2006-01-02 15:04:05 MST"),
 		Hostname:        a.hostname,
 		TotalAlerts:     int64(len(alerts)),
@@ -771,8 +887,14 @@ func (a *App) buildOverview() (OverviewResponse, error) {
 		Hourly24h:       hourly,
 		FilterSites:     filterSites,
 		FilterScenarios: filterScenarios,
+		FilterCountries: filterCountries,
 		Metrics:         metrics,
-	}, nil
+	}
+	a.cacheMu.Lock()
+	a.cachedOV = ov
+	a.cachedOVAt = time.Now()
+	a.cacheMu.Unlock()
+	return ov, nil
 }
 
 func (a *App) loadDecisions() ([]DecisionItem, error) {
@@ -974,6 +1096,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	ip := clientIP(r)
 	if !a.limiter.Allow(ip) {
+		log.Printf("AUDIT login_rate_limited ip=%s", ip)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_ = a.loginT.Execute(w, map[string]any{"Error": "Too many failed attempts. Wait 5 minutes.", "Hostname": a.hostname})
@@ -986,12 +1109,14 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 	passOK := exists && verifyPassword(pass, u.PasswordHash)
 	if !passOK {
 		a.limiter.RecordFail(ip)
+		log.Printf("AUDIT login_failed user=%q ip=%s", user, ip)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
 		_ = a.loginT.Execute(w, map[string]any{"Error": "Invalid username or password.", "Hostname": a.hostname})
 		return
 	}
 	a.limiter.Reset(ip)
+	log.Printf("AUDIT login_success user=%q role=%s ip=%s", u.Username, u.Role, ip)
 	ttl := time.Duration(a.cfg.SessionTTLMin) * time.Minute
 	if ttl <= 0 {
 		ttl = 12 * time.Hour
@@ -1038,6 +1163,21 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request, u User) {
 	})
 }
 
+func checkSameOrigin(r *http.Request) bool {
+	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs != "" {
+		if sfs != "same-origin" && sfs != "same-site" && sfs != "none" {
+			return false
+		}
+	}
+	if orig := r.Header.Get("Origin"); orig != "" {
+		u, err := url.Parse(orig)
+		if err != nil || !strings.EqualFold(u.Host, r.Host) {
+			return false
+		}
+	}
+	return true
+}
+
 func decodeJSONBody(r *http.Request, dst any) error {
 	defer r.Body.Close()
 	dec := json.NewDecoder(io.LimitReader(r.Body, 16384))
@@ -1047,6 +1187,10 @@ func decodeJSONBody(r *http.Request, dst any) error {
 func (a *App) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request, u User) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+		return
+	}
+	if !checkSameOrigin(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-origin request blocked"})
 		return
 	}
 	var req struct {
@@ -1071,6 +1215,7 @@ func (a *App) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request, u 
 		}
 	}
 	if idx < 0 || !verifyPassword(req.CurrentPassword, a.cfg.Users[idx].PasswordHash) {
+		log.Printf("AUDIT password_change_failed user=%q ip=%s", u.Username, clientIP(r))
 		writeJSON(w, 403, map[string]string{"error": "current password is incorrect"})
 		return
 	}
@@ -1084,6 +1229,7 @@ func (a *App) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request, u 
 		writeJSON(w, 500, map[string]string{"error": "failed to save config"})
 		return
 	}
+	log.Printf("AUDIT password_changed user=%q ip=%s", u.Username, clientIP(r))
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
@@ -1102,6 +1248,10 @@ func (a *App) handleUsers(w http.ResponseWriter, r *http.Request, current User) 
 		a.cfgMu.RUnlock()
 		writeJSON(w, 200, map[string]any{"items": out})
 	case http.MethodPost:
+		if !checkSameOrigin(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-origin request blocked"})
+			return
+		}
 		var req struct {
 			Username string `json:"username"`
 			Password string `json:"password"`
@@ -1147,6 +1297,7 @@ func (a *App) handleUsers(w http.ResponseWriter, r *http.Request, current User) 
 			writeJSON(w, 500, map[string]string{"error": "failed to save config"})
 			return
 		}
+		log.Printf("AUDIT user_created actor=%q target=%q role=%s ip=%s", current.Username, req.Username, role, clientIP(r))
 		writeJSON(w, 200, map[string]any{"ok": true})
 	default:
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
@@ -1156,6 +1307,10 @@ func (a *App) handleUsers(w http.ResponseWriter, r *http.Request, current User) 
 func (a *App) handleAdminSetPassword(w http.ResponseWriter, r *http.Request, current User) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+		return
+	}
+	if !checkSameOrigin(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-origin request blocked"})
 		return
 	}
 	var req struct {
@@ -1184,6 +1339,7 @@ func (a *App) handleAdminSetPassword(w http.ResponseWriter, r *http.Request, cur
 				writeJSON(w, 500, map[string]string{"error": "failed to save config"})
 				return
 			}
+			log.Printf("AUDIT admin_password_reset actor=%q target=%q ip=%s", current.Username, a.cfg.Users[i].Username, clientIP(r))
 			writeJSON(w, 200, map[string]any{"ok": true})
 			return
 		}
@@ -1194,6 +1350,10 @@ func (a *App) handleAdminSetPassword(w http.ResponseWriter, r *http.Request, cur
 func (a *App) handleDeleteUser(w http.ResponseWriter, r *http.Request, current User) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
+		return
+	}
+	if !checkSameOrigin(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "cross-origin request blocked"})
 		return
 	}
 	var req struct {
@@ -1233,6 +1393,7 @@ func (a *App) handleDeleteUser(w http.ResponseWriter, r *http.Request, current U
 		writeJSON(w, 500, map[string]string{"error": "failed to save config"})
 		return
 	}
+	log.Printf("AUDIT user_deleted actor=%q target=%q ip=%s", current.Username, target, clientIP(r))
 	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
@@ -1243,7 +1404,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, _ User) {
-	ov, err := a.buildOverview()
+	force := r.URL.Query().Get("refresh") == "1"
+	ov, err := a.buildOverview(force)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -1251,23 +1413,15 @@ func (a *App) handleOverview(w http.ResponseWriter, r *http.Request, _ User) {
 	writeJSON(w, 200, ov)
 }
 
-func (a *App) handleAlerts(w http.ResponseWriter, r *http.Request, _ User) {
+func (a *App) filterAlerts(r *http.Request) ([]AlertItem, error) {
 	q := r.URL.Query()
 	siteF := strings.TrimSpace(q.Get("site"))
 	scenF := strings.TrimSpace(q.Get("scenario"))
+	ctryF := strings.TrimSpace(q.Get("country"))
 	searchF := strings.ToLower(strings.TrimSpace(q.Get("q")))
 	winF := strings.TrimSpace(q.Get("window"))
 	hideRBL := q.Get("hide_rbl") == "1"
 	onlyActive := q.Get("active_only") == "1"
-
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
-		page = 1
-	}
-	pageSize, _ := strconv.Atoi(q.Get("page_size"))
-	if pageSize < 10 || pageSize > 200 {
-		pageSize = 50
-	}
 
 	var minTS int64
 	switch winF {
@@ -1279,10 +1433,9 @@ func (a *App) handleAlerts(w http.ResponseWriter, r *http.Request, _ User) {
 		minTS = time.Now().Add(-7 * 24 * time.Hour).Unix()
 	}
 
-	all, err := a.loadAllAlerts(false)
+	all, err := a.loadAlertsCached(false)
 	if err != nil {
-		writeJSON(w, 500, map[string]string{"error": err.Error()})
-		return
+		return nil, err
 	}
 
 	var filtered []AlertItem
@@ -1297,6 +1450,9 @@ func (a *App) handleAlerts(w http.ResponseWriter, r *http.Request, _ User) {
 			continue
 		}
 		if scenF != "" && al.Scenario != scenF {
+			continue
+		}
+		if ctryF != "" && !strings.EqualFold(al.Country, ctryF) {
 			continue
 		}
 		if siteF != "" {
@@ -1324,6 +1480,25 @@ func (a *App) handleAlerts(w http.ResponseWriter, r *http.Request, _ User) {
 		}
 		filtered = append(filtered, al)
 	}
+	return filtered, nil
+}
+
+func (a *App) handleAlerts(w http.ResponseWriter, r *http.Request, _ User) {
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(q.Get("page_size"))
+	if pageSize < 10 || pageSize > 200 {
+		pageSize = 50
+	}
+
+	filtered, err := a.filterAlerts(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
 
 	total := len(filtered)
 	start := (page - 1) * pageSize
@@ -1342,6 +1517,51 @@ func (a *App) handleAlerts(w http.ResponseWriter, r *http.Request, _ User) {
 	})
 }
 
+func (a *App) handleAlertsExport(w http.ResponseWriter, r *http.Request, u User) {
+	filtered, err := a.filterAlerts(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(filtered) > 5000 {
+		filtered = filtered[:5000]
+	}
+	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	stamp := time.Now().In(a.loc).Format("20060102-150405")
+	log.Printf("AUDIT export_alerts user=%q format=%s count=%d ip=%s", u.Username, format, len(filtered), clientIP(r))
+
+	if format == "json" {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="security-alerts-%s.json"`, stamp))
+		_ = json.NewEncoder(w).Encode(filtered)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="security-alerts-%s.csv"`, stamp))
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"id", "created_at", "source_ip", "country", "as_number", "as_name", "scenario", "events_count", "active_ban", "ban_remaining", "sites", "target_uris", "methods", "statuses"})
+	for _, al := range filtered {
+		_ = cw.Write([]string{
+			strconv.FormatInt(al.ID, 10),
+			al.CreatedAt,
+			al.SourceIP,
+			al.Country,
+			al.ASNNumber,
+			al.ASNName,
+			al.Scenario,
+			strconv.FormatInt(al.EventsCount, 10),
+			strconv.FormatBool(al.ActiveBan),
+			al.BanRemaining,
+			strings.Join(al.Sites, "; "),
+			strings.Join(al.TargetURIs, "; "),
+			strings.Join(al.Methods, "; "),
+			strings.Join(al.Statuses, "; "),
+		})
+	}
+	cw.Flush()
+}
+
 func (a *App) handleAlertDetail(w http.ResponseWriter, r *http.Request, _ User) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/alert/")
 	id, err := strconv.ParseInt(idStr, 10, 64)
@@ -1349,18 +1569,16 @@ func (a *App) handleAlertDetail(w http.ResponseWriter, r *http.Request, _ User) 
 		writeJSON(w, 400, map[string]string{"error": "invalid alert id"})
 		return
 	}
-	all, err := a.loadAllAlerts(true)
+	al, found, err := a.loadAlertByID(id)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
-	for _, al := range all {
-		if al.ID == id {
-			writeJSON(w, 200, al)
-			return
-		}
+	if !found {
+		writeJSON(w, 404, map[string]string{"error": "alert not found"})
+		return
 	}
-	writeJSON(w, 404, map[string]string{"error": "alert not found"})
+	writeJSON(w, 200, al)
 }
 
 func (a *App) handleDecisions(w http.ResponseWriter, r *http.Request, _ User) {
@@ -1563,6 +1781,18 @@ func main() {
 		app.cfgMu.Unlock()
 	}
 
+	srv := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           app.handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	log.Printf("crowdsec-ui listening on http://%s (db=%s)", cfg.ListenAddr, cfg.DBPath)
+	log.Fatal(srv.ListenAndServe())
+}
+
+func (a *App) handler() http.Handler {
 	mux := http.NewServeMux()
 	serveEmbedded := func(path, contentType string) http.HandlerFunc {
 		data, err := webFS.ReadFile(path)
@@ -1580,32 +1810,24 @@ func main() {
 	mux.HandleFunc("/favicon.ico", serveEmbedded("web/favicon.ico", "image/x-icon"))
 	mux.HandleFunc("/favicon.svg", serveEmbedded("web/favicon.svg", "image/svg+xml"))
 	mux.HandleFunc("/apple-touch-icon.png", serveEmbedded("web/apple-touch-icon.png", "image/png"))
-	mux.HandleFunc("/login", app.handleLogin)
-	mux.HandleFunc("/logout", app.handleLogout)
+	mux.HandleFunc("/login", a.handleLogin)
+	mux.HandleFunc("/logout", a.handleLogout)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if err := app.db.Ping(); err != nil && !errors.Is(err, sql.ErrConnDone) {
+		if err := a.db.Ping(); err != nil && !errors.Is(err, sql.ErrConnDone) {
 			http.Error(w, "db error", 500)
 			return
 		}
 		_, _ = w.Write([]byte("ok\n"))
 	})
-	mux.HandleFunc("/", app.requireAuth(app.handleIndex))
-	mux.HandleFunc("/api/overview", app.requireAuth(app.handleOverview))
-	mux.HandleFunc("/api/alerts", app.requireAuth(app.handleAlerts))
-	mux.HandleFunc("/api/alert/", app.requireAuth(app.handleAlertDetail))
-	mux.HandleFunc("/api/decisions", app.requireAuth(app.handleDecisions))
-	mux.HandleFunc("/api/account/password", app.requireAuth(app.handleChangeOwnPassword))
-	mux.HandleFunc("/api/users", app.requireAdmin(app.handleUsers))
-	mux.HandleFunc("/api/users/password", app.requireAdmin(app.handleAdminSetPassword))
-	mux.HandleFunc("/api/users/delete", app.requireAdmin(app.handleDeleteUser))
-
-	srv := &http.Server{
-		Addr:              cfg.ListenAddr,
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	log.Printf("crowdsec-ui listening on http://%s (db=%s)", cfg.ListenAddr, cfg.DBPath)
-	log.Fatal(srv.ListenAndServe())
+	mux.HandleFunc("/", a.requireAuth(a.handleIndex))
+	mux.HandleFunc("/api/overview", a.requireAuth(a.handleOverview))
+	mux.HandleFunc("/api/alerts", a.requireAuth(a.handleAlerts))
+	mux.HandleFunc("/api/alerts/export", a.requireAuth(a.handleAlertsExport))
+	mux.HandleFunc("/api/alert/", a.requireAuth(a.handleAlertDetail))
+	mux.HandleFunc("/api/decisions", a.requireAuth(a.handleDecisions))
+	mux.HandleFunc("/api/account/password", a.requireAuth(a.handleChangeOwnPassword))
+	mux.HandleFunc("/api/users", a.requireAdmin(a.handleUsers))
+	mux.HandleFunc("/api/users/password", a.requireAdmin(a.handleAdminSetPassword))
+	mux.HandleFunc("/api/users/delete", a.requireAdmin(a.handleDeleteUser))
+	return mux
 }
