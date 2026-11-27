@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build release archives
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 freebsd/amd64 freebsd/arm64; do
+            GOOS="${target%/*}"
+            GOARCH="${target#*/}"
+            STAGE="dist/stage-${GOOS}-${GOARCH}"
+            mkdir -p "${STAGE}/contrib"
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags="-s -w" -o "${STAGE}/crowdsec-ui" .
+            cp README.md LICENSE config.example.json "${STAGE}/"
+            cp contrib/* "${STAGE}/contrib/"
+            tar -czf "dist/9M2PJU-Security-Console-${TAG}-${GOOS}-${GOARCH}.tar.gz" -C "${STAGE}" .
+            rm -rf "${STAGE}"
+          done
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS.txt)
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

@@ -1,0 +1,8 @@
+.git
+.github
+docs
+*.db
+config.json
+crowdsec-ui
+9m2pju-security-console
+dist

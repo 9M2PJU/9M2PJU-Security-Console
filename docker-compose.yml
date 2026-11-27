@@ -1,0 +1,22 @@
+services:
+  security-console:
+    build: .
+    container_name: 9m2pju-security-console
+    restart: unless-stopped
+    # Host network lets 127.0.0.1:6060 Prometheus scraping work cleanly while keeping 127.0.0.1:8082 bound locally.
+    # Or switch to ports: ["127.0.0.1:8082:8082"] with CROWDSEC_UI_LISTEN=0.0.0.0:8082.
+    network_mode: host
+    environment:
+      CROWDSEC_UI_LISTEN: "127.0.0.1:8082"
+      CROWDSEC_UI_DB: "/crowdsec-data/crowdsec.db"
+      CROWDSEC_UI_METRICS: "http://127.0.0.1:6060/metrics"
+      CROWDSEC_UI_TIMEZONE: "UTC"
+      # CROWDSEC_UI_HOSTNAME: "my-server.example.com"
+      UI_ADMIN_USER: "admin"
+    volumes:
+      - crowdsec-ui-config:/config
+      # On FreeBSD, change /var/lib/crowdsec/data to /var/db/crowdsec/data
+      - /var/lib/crowdsec/data:/crowdsec-data:ro
+
+volumes:
+  crowdsec-ui-config:

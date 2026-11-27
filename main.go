@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	_ "time/tzdata"
 
 	_ "modernc.org/sqlite"
 )
@@ -1390,6 +1391,10 @@ func main() {
 	genSecret := flag.Bool("gen-secret", false, "Generate random 32-byte hex secret and exit")
 	initConfig := flag.Bool("init-config", false, "Create a new config.json at -c with a random admin password and exit")
 	initUser := flag.String("init-user", "admin", "Initial admin username for -init-config")
+	initListen := flag.String("init-listen", "127.0.0.1:8082", "Initial listen_addr for -init-config")
+	initDB := flag.String("init-db", "/var/lib/crowdsec/data/crowdsec.db", "Initial db_path for -init-config")
+	initMetrics := flag.String("init-metrics", "http://127.0.0.1:6060/metrics", "Initial metrics_url for -init-config")
+	initTZ := flag.String("init-tz", "UTC", "Initial timezone for -init-config")
 	flag.Parse()
 
 	if *genPass != "" {
@@ -1425,12 +1430,12 @@ func main() {
 			log.Fatal(err)
 		}
 		cfg := Config{
-			ListenAddr:    "127.0.0.1:8082",
-			DBPath:        "/var/lib/crowdsec/data/crowdsec.db",
-			MetricsURL:    "http://127.0.0.1:6060/metrics",
+			ListenAddr:    *initListen,
+			DBPath:        *initDB,
+			MetricsURL:    *initMetrics,
 			SessionSecret: hex.EncodeToString(secB),
 			SessionTTLMin: 720,
-			Timezone:      "UTC",
+			Timezone:      *initTZ,
 			Users: []User{{
 				Username:     *initUser,
 				PasswordHash: ph,
@@ -1458,11 +1463,23 @@ func main() {
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		log.Fatalf("parse config: %v", err)
 	}
+	if v := strings.TrimSpace(os.Getenv("CROWDSEC_UI_LISTEN")); v != "" {
+		cfg.ListenAddr = v
+	}
+	if v := strings.TrimSpace(os.Getenv("CROWDSEC_UI_DB")); v != "" {
+		cfg.DBPath = v
+	}
+	if v := strings.TrimSpace(os.Getenv("CROWDSEC_UI_METRICS")); v != "" {
+		cfg.MetricsURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("CROWDSEC_UI_TIMEZONE")); v != "" {
+		cfg.Timezone = v
+	}
 	if cfg.ListenAddr == "" {
 		cfg.ListenAddr = "127.0.0.1:8082"
 	}
 	if cfg.DBPath == "" {
-		cfg.DBPath = "/var/db/crowdsec/data/crowdsec.db"
+		cfg.DBPath = "/var/lib/crowdsec/data/crowdsec.db"
 	}
 	if cfg.MetricsURL == "" {
 		cfg.MetricsURL = "http://127.0.0.1:6060/metrics"
@@ -1508,7 +1525,10 @@ func main() {
 		log.Fatalf("parse index.html: %v", err)
 	}
 
-	hostname, _ := os.Hostname()
+	hostname := strings.TrimSpace(os.Getenv("CROWDSEC_UI_HOSTNAME"))
+	if hostname == "" {
+		hostname, _ = os.Hostname()
+	}
 	if hostname == "" {
 		hostname = "localhost"
 	}

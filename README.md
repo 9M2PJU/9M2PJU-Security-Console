@@ -4,10 +4,25 @@ A lightweight, single-binary web security console written in Go for monitoring C
 
 Developed by **9M2PJU** (`https://hamradio.my`).
 
+![Dashboard Overview](docs/screenshots/dashboard-overview.png)
+
+## Screenshots
+
+| Alert Detail Inspection | User Management & RBAC |
+| :---: | :---: |
+| ![Alert Detail Modal](docs/screenshots/alert-detail-modal.png) | ![User Management](docs/screenshots/user-management.png) |
+
+<details>
+<summary>Login Screen (TLS + mTLS Protected)</summary>
+
+![Login Screen](docs/screenshots/login-screen.png)
+
+</details>
+
 ## Why This Exists
 
 - **No 500-alert monthly limit:** Reads your local `crowdsec.db` (SQLite, strictly read-only) and scrapes your local CrowdSec Prometheus endpoint (`127.0.0.1:6060/metrics`) directly.
-- **Minimal footprint:** Single static Go binary (`CGO_ENABLED=0`, pure-Go `modernc.org/sqlite`), ~45 MB RSS, zero external JavaScript/CSS CDNs, and no OpenSearch/Elasticsearch/Loki dependency.
+- **Minimal footprint:** Single static Go binary (`CGO_ENABLED=0`, pure-Go `modernc.org/sqlite`), ~45 MB RSS (~25 MB Docker image), zero external JavaScript/CSS CDNs, and no OpenSearch/Elasticsearch/Loki dependency.
 - **Multi-vhost visibility:** Maps per-vhost log paths (via configurable `site_map` in `config.json` or CrowdSec `site` metadata) so every HTTP alert shows the full target URL (`https://<site><target_uri>`) instead of only a relative path.
 - **Live enforcement clarity:** Automatically inspects the `bouncers` table and clearly displays **Monitor Only (Not Blocking)** with `would-ban` badges when `0` bouncers are active, switching to **Enforcing** when a bouncer is connected.
 
@@ -22,11 +37,41 @@ Developed by **9M2PJU** (`https://hamradio.my`).
   - **User Management** tab (`admin` role only) to create `viewer` (read-only) or `admin` accounts, reset passwords, and delete accounts (immediately invalidating deleted user sessions).
 - **Self-Contained Assets:** Custom SVG shield/radar emblem and embedded `/favicon.ico`, `/favicon.svg`, and `/apple-touch-icon.png` routes.
 
-## Quick Start
+## Installation
 
-### 1. Build
+### Option 1: One-Line Installer (Linux & FreeBSD, Prebuilt Releases)
 
-Requires Go 1.24+ (no C compiler needed because `CGO_ENABLED=0` uses pure-Go SQLite):
+Downloads the verified release binary from [GitHub Releases](https://github.com/9M2PJU/9M2PJU-Security-Console/releases), verifies `SHA256SUMS.txt`, initializes `config.json` with a random admin password, and sets up the `systemd` (Linux) or `rc.d` (FreeBSD) service:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/9M2PJU/9M2PJU-Security-Console/main/install.sh | sudo sh
+```
+
+Useful installer flags:
+```bash
+# Install a specific tag without touching systemd/rc.d
+sudo sh install.sh --version v1.0.0 --no-service
+
+# Uninstall binary and service (preserves config.json)
+sudo sh install.sh --uninstall
+```
+
+### Option 2: Docker & Docker Compose
+
+Run the ~25 MB Alpine image with CrowdSec's data directory mounted read-only:
+
+```bash
+git clone https://github.com/9M2PJU/9M2PJU-Security-Console.git
+cd 9M2PJU-Security-Console
+docker compose up -d
+docker compose logs security-console   # Prints the generated first-boot admin password
+```
+
+On FreeBSD or custom paths, edit the read-only volume in `docker-compose.yml` (for example `/var/db/crowdsec/data:/crowdsec-data:ro`). Supported environment overrides: `CROWDSEC_UI_LISTEN`, `CROWDSEC_UI_DB`, `CROWDSEC_UI_METRICS`, `CROWDSEC_UI_TIMEZONE`, `CROWDSEC_UI_HOSTNAME`, and `UI_ADMIN_USER`.
+
+### Option 3: Build From Source
+
+Requires Go 1.26+ (no C compiler needed because `CGO_ENABLED=0` uses pure-Go SQLite):
 
 ```bash
 git clone https://github.com/9M2PJU/9M2PJU-Security-Console.git
@@ -39,32 +84,20 @@ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o crowdsec-ui .
 CGO_ENABLED=0 GOOS=freebsd GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o crowdsec-ui .
 ```
 
-### 2. Initialize Configuration
-
-Generate a secure `config.json` (mode `0600`) with a random 20-character admin password and 32-byte session secret:
+Initialize a fresh `config.json` (mode `0600`):
 
 ```bash
 ./crowdsec-ui -c /etc/crowdsec-ui/config.json -init-config -init-user admin
 ```
 
-Edit `/etc/crowdsec-ui/config.json` to adjust:
-- `db_path`: `/var/lib/crowdsec/data/crowdsec.db` (Linux) or `/var/db/crowdsec/data/crowdsec.db` (FreeBSD)
-- `timezone`: IANA timezone such as `UTC` or `Asia/Kuala_Lumpur`
-- `site_map`: Optional substring-to-domain mapping for Nginx/Apache log filenames (for example `"/site-a_": "site-a.example.com"`)
-
-Other CLI helpers:
+Edit `config.json` to set `site_map` (substring-to-domain mapping for log filenames) or `timezone` (`UTC`, `Asia/Kuala_Lumpur`, etc.):
 
 ```bash
 ./crowdsec-ui -hash-password "YourStrongPassword"
 ./crowdsec-ui -gen-secret
 ```
 
-### 3. Run as a Service
-
-- **Linux (systemd):** Copy `contrib/crowdsec-ui.service` to `/etc/systemd/system/crowdsec-ui.service`, then run `systemctl enable --now crowdsec-ui`.
-- **FreeBSD (rc.d):** Copy `contrib/crowdsec_ui.rc` to `/usr/local/etc/rc.d/crowdsec_ui` (`chmod 0755`), add `crowdsec_ui_enable="YES"` to `/etc/rc.conf`, and run `service crowdsec_ui start`.
-
-### 4. Put Behind Nginx HTTPS (Recommended)
+## Reverse Proxy Setup (Recommended)
 
 The service binds to `127.0.0.1:8082` by default. Use `contrib/nginx-mtls.conf.example` to expose it over HTTPS (optionally enforcing Cloudflare Authenticated Origin Pulls mTLS so direct origin IP access is blocked).
 
